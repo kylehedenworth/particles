@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Hand Particle Flow</title>
+<title>Motion Particle Emitter</title>
 <style>
 body{
   margin:0;
@@ -19,6 +19,7 @@ video{
 }
 </style>
 </head>
+
 <body>
 
 <video id="video" autoplay playsinline></video>
@@ -41,60 +42,55 @@ canvas.width = width
 canvas.height = height
 
 let prevFrame = null
+let particles = []
 
-const particles = []
-const maxParticles = 5000
-const damping = 0.995
+const maxParticles = 15000
+const damping = 0.996
 
 class Particle{
 
-  constructor(x,y){
+  constructor(x,y,vx,vy){
     this.x = x
     this.y = y
-    this.vx = (Math.random()-0.5)*0.5
-    this.vy = (Math.random()-0.5)*0.5
+    this.vx = vx
+    this.vy = vy
+    this.life = 400 + Math.random()*200
   }
 
   update(){
+
+    // simple fluid drift field
+    const angle = Math.sin(this.y*0.01) + Math.cos(this.x*0.01)
+
+    this.vx += Math.cos(angle)*0.02
+    this.vy += Math.sin(angle)*0.02
 
     this.x += this.vx
     this.y += this.vy
 
     this.vx *= damping
     this.vy *= damping
+
+    this.life--
   }
 
   draw(){
+
     ctx.beginPath()
-    ctx.arc(this.x,this.y,1.6,0,Math.PI*2)
+    ctx.arc(this.x,this.y,1.5,0,Math.PI*2)
     ctx.fillStyle="white"
     ctx.fill()
   }
 
-  offscreen(){
+  dead(){
+
     return (
+      this.life <= 0 ||
       this.x < -20 ||
       this.x > width+20 ||
       this.y < -20 ||
       this.y > height+20
     )
-  }
-}
-
-function spawnEdgeParticle(){
-
-  let side = Math.floor(Math.random()*4)
-
-  if(side===0) return new Particle(Math.random()*width,-5)
-  if(side===1) return new Particle(Math.random()*width,height+5)
-  if(side===2) return new Particle(-5,Math.random()*height)
-  if(side===3) return new Particle(width+5,Math.random()*height)
-}
-
-function maintainParticles(){
-
-  while(particles.length < maxParticles){
-    particles.push(spawnEdgeParticle())
   }
 }
 
@@ -109,7 +105,7 @@ function detectMotion(){
 
   motionCtx.drawImage(video,0,0,motionCanvas.width,motionCanvas.height)
 
-  let frame = motionCtx.getImageData(0,0,motionCanvas.width,motionCanvas.height)
+  const frame = motionCtx.getImageData(0,0,motionCanvas.width,motionCanvas.height)
 
   if(!prevFrame){
     prevFrame = frame
@@ -118,23 +114,20 @@ function detectMotion(){
 
   let motionPoints = []
 
-  for(let i=0;i<frame.data.length;i+=16){
+  for(let i=0;i<frame.data.length;i+=32){
 
-    let diff =
+    const diff =
       Math.abs(frame.data[i]-prevFrame.data[i]) +
       Math.abs(frame.data[i+1]-prevFrame.data[i+1]) +
       Math.abs(frame.data[i+2]-prevFrame.data[i+2])
 
     if(diff > 70){
 
-      let index = i/4
-      let x = index % motionCanvas.width
-      let y = Math.floor(index / motionCanvas.width)
+      const index = i/4
+      const x = index % motionCanvas.width
+      const y = Math.floor(index / motionCanvas.width)
 
-      motionPoints.push({
-        x:x/motionCanvas.width * width,
-        y:y/motionCanvas.height * height
-      })
+      motionPoints.push({x,y})
     }
   }
 
@@ -142,47 +135,44 @@ function detectMotion(){
   return motionPoints
 }
 
-function applyMotion(points){
+function emitParticles(points){
 
-  for(let p of points){
+  for(const p of points){
 
-    for(let particle of particles){
+    const x = p.x/motionCanvas.width * width
+    const y = p.y/motionCanvas.height * height
 
-      let dx = particle.x - p.x
-      let dy = particle.y - p.y
+    for(let i=0;i<4;i++){
 
-      let dist = Math.sqrt(dx*dx + dy*dy)
+      const vx = (Math.random()-0.5)*2
+      const vy = (Math.random()-0.5)*2
 
-      if(dist < 90){
-
-        let force = (90-dist)/90
-
-        particle.vx += dx/dist * force * 3
-        particle.vy += dy/dist * force * 3
-      }
+      particles.push(new Particle(x,y,vx,vy))
     }
+  }
+
+  if(particles.length > maxParticles){
+    particles.splice(0, particles.length-maxParticles)
   }
 }
 
 function animate(){
 
-  ctx.fillStyle="black"
+  ctx.fillStyle="rgba(0,0,0,0.2)"
   ctx.fillRect(0,0,width,height)
 
-  maintainParticles()
+  const motion = detectMotion()
 
-  let motion = detectMotion()
-
-  applyMotion(motion)
+  emitParticles(motion)
 
   for(let i=particles.length-1;i>=0;i--){
 
-    let p = particles[i]
+    const p = particles[i]
 
     p.update()
     p.draw()
 
-    if(p.offscreen()){
+    if(p.dead()){
       particles.splice(i,1)
     }
   }
@@ -193,10 +183,8 @@ function animate(){
 animate()
 
 window.addEventListener("resize",()=>{
-
   width = window.innerWidth
   height = window.innerHeight
-
   canvas.width = width
   canvas.height = height
 })
