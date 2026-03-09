@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Motion Particle Emitter</title>
+<title>Motion Momentum Particles</title>
 <style>
 body{
   margin:0;
@@ -44,8 +44,8 @@ canvas.height = height
 let prevFrame = null
 let particles = []
 
+const damping = 0.995
 const maxParticles = 15000
-const damping = 0.996
 
 class Particle{
 
@@ -54,16 +54,10 @@ class Particle{
     this.y = y
     this.vx = vx
     this.vy = vy
-    this.life = 400 + Math.random()*200
+    this.life = 500
   }
 
   update(){
-
-    // simple fluid drift field
-    const angle = Math.sin(this.y*0.01) + Math.cos(this.x*0.01)
-
-    this.vx += Math.cos(angle)*0.02
-    this.vy += Math.sin(angle)*0.02
 
     this.x += this.vx
     this.y += this.vy
@@ -75,7 +69,6 @@ class Particle{
   }
 
   draw(){
-
     ctx.beginPath()
     ctx.arc(this.x,this.y,1.5,0,Math.PI*2)
     ctx.fillStyle="white"
@@ -83,7 +76,6 @@ class Particle{
   }
 
   dead(){
-
     return (
       this.life <= 0 ||
       this.x < -20 ||
@@ -112,7 +104,7 @@ function detectMotion(){
     return []
   }
 
-  let motionPoints = []
+  const motionPoints = []
 
   for(let i=0;i<frame.data.length;i+=32){
 
@@ -127,7 +119,15 @@ function detectMotion(){
       const x = index % motionCanvas.width
       const y = Math.floor(index / motionCanvas.width)
 
-      motionPoints.push({x,y})
+      const dx = frame.data[i] - prevFrame.data[i]
+      const dy = frame.data[i+1] - prevFrame.data[i+1]
+
+      motionPoints.push({
+        x,
+        y,
+        vx: dx * 0.02,
+        vy: dy * 0.02
+      })
     }
   }
 
@@ -142,13 +142,10 @@ function emitParticles(points){
     const x = p.x/motionCanvas.width * width
     const y = p.y/motionCanvas.height * height
 
-    for(let i=0;i<4;i++){
+    const vx = p.vx
+    const vy = p.vy
 
-      const vx = (Math.random()-0.5)*2
-      const vy = (Math.random()-0.5)*2
-
-      particles.push(new Particle(x,y,vx,vy))
-    }
+    particles.push(new Particle(x,y,vx,vy))
   }
 
   if(particles.length > maxParticles){
