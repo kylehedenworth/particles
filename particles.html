@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Hand Particle Field</title>
+<title>Hand Particle Flow</title>
 <style>
 body{
   margin:0;
@@ -36,63 +36,67 @@ const motionCtx = motionCanvas.getContext("2d")
 
 let width = window.innerWidth
 let height = window.innerHeight
+
 canvas.width = width
 canvas.height = height
 
 let prevFrame = null
 
-// Particle settings
-const spacing = 14
 const particles = []
-const damping = 0.95
+const maxParticles = 5000
+const damping = 0.995
 
 class Particle{
+
   constructor(x,y){
     this.x = x
     this.y = y
-    this.vx = 0
-    this.vy = 0
-    this.baseX = x
-    this.baseY = y
+    this.vx = (Math.random()-0.5)*0.5
+    this.vy = (Math.random()-0.5)*0.5
   }
 
   update(){
-    let dx = this.baseX - this.x
-    let dy = this.baseY - this.y
-
-    this.vx += dx * 0.01
-    this.vy += dy * 0.01
-
-    this.vx *= damping
-    this.vy *= damping
 
     this.x += this.vx
     this.y += this.vy
+
+    this.vx *= damping
+    this.vy *= damping
   }
 
   draw(){
     ctx.beginPath()
-    ctx.arc(this.x,this.y,2,0,Math.PI*2)
+    ctx.arc(this.x,this.y,1.6,0,Math.PI*2)
     ctx.fillStyle="white"
     ctx.fill()
   }
-}
 
-// Create hex close packed grid
-function initParticles(){
-  particles.length = 0
-  let rowOffset = false
-
-  for(let y=0;y<height;y+=spacing){
-    rowOffset = !rowOffset
-    for(let x=0;x<width;x+=spacing){
-      let px = x + (rowOffset ? spacing/2 : 0)
-      particles.push(new Particle(px,y))
-    }
+  offscreen(){
+    return (
+      this.x < -20 ||
+      this.x > width+20 ||
+      this.y < -20 ||
+      this.y > height+20
+    )
   }
 }
 
-initParticles()
+function spawnEdgeParticle(){
+
+  let side = Math.floor(Math.random()*4)
+
+  if(side===0) return new Particle(Math.random()*width,-5)
+  if(side===1) return new Particle(Math.random()*width,height+5)
+  if(side===2) return new Particle(-5,Math.random()*height)
+  if(side===3) return new Particle(width+5,Math.random()*height)
+}
+
+function maintainParticles(){
+
+  while(particles.length < maxParticles){
+    particles.push(spawnEdgeParticle())
+  }
+}
 
 navigator.mediaDevices.getUserMedia({
   video:{facingMode:"user"},
@@ -114,14 +118,14 @@ function detectMotion(){
 
   let motionPoints = []
 
-  for(let i=0;i<frame.data.length;i+=4){
+  for(let i=0;i<frame.data.length;i+=16){
 
     let diff =
       Math.abs(frame.data[i]-prevFrame.data[i]) +
       Math.abs(frame.data[i+1]-prevFrame.data[i+1]) +
       Math.abs(frame.data[i+2]-prevFrame.data[i+2])
 
-    if(diff > 80){
+    if(diff > 70){
 
       let index = i/4
       let x = index % motionCanvas.width
@@ -147,14 +151,14 @@ function applyMotion(points){
       let dx = particle.x - p.x
       let dy = particle.y - p.y
 
-      let dist = Math.sqrt(dx*dx+dy*dy)
+      let dist = Math.sqrt(dx*dx + dy*dy)
 
-      if(dist < 80){
+      if(dist < 90){
 
-        let force = (80-dist)/80
+        let force = (90-dist)/90
 
-        particle.vx += dx/dist * force * 2
-        particle.vy += dy/dist * force * 2
+        particle.vx += dx/dist * force * 3
+        particle.vy += dy/dist * force * 3
       }
     }
   }
@@ -165,12 +169,22 @@ function animate(){
   ctx.fillStyle="black"
   ctx.fillRect(0,0,width,height)
 
+  maintainParticles()
+
   let motion = detectMotion()
+
   applyMotion(motion)
 
-  for(let p of particles){
+  for(let i=particles.length-1;i>=0;i--){
+
+    let p = particles[i]
+
     p.update()
     p.draw()
+
+    if(p.offscreen()){
+      particles.splice(i,1)
+    }
   }
 
   requestAnimationFrame(animate)
@@ -179,11 +193,12 @@ function animate(){
 animate()
 
 window.addEventListener("resize",()=>{
+
   width = window.innerWidth
   height = window.innerHeight
+
   canvas.width = width
   canvas.height = height
-  initParticles()
 })
 
 </script>
